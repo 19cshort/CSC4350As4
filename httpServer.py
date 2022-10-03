@@ -1,13 +1,16 @@
 #Connor Short
 #python version 3.9.4
 #open an IDLE shell and run the server
-#used the socket library for the tcp socket, used optparse to get commandline parameters, used os and sys libraries to check if a requested file is available
+#used the socket library for the tcp socket, used optparse to get commandline parameters,
+#used os and sys libraries to check if a requested file is available and size of the file for the logs,
+#used the datetime library to get the current date and time for the logs
 
 from socket import *
 import socket
 from optparse import OptionParser
 import os
 import sys
+from datetime import datetime
 
 
 #options for command line parameters
@@ -37,38 +40,89 @@ else:
         connectionSocket, clientAddress = serverSocket.accept()
         message = connectionSocket.recv(2048) #recieving the http request
         modifiedMessage = message.decode()
-        request = modifiedMessage.split('\r\n',1) #splitting the message so that the first line of the request is in request [1]
+        request = modifiedMessage.split('\r\n',9) #splitting the message so that the first line of the request is in request [0] and the user agent is in request[7]
+
+        print (modifiedMessage)
+
+        #if statement to ensure request is a get, and if not send a 400
+        if request[0][0] != 'G' or request[0][1] != 'E' or request[0][2] != 'T' or request[0][3] != ' ':
+            resCode = '400'
+            responseLine = httpVersion + ' ' + '400' + ' ' + 'BAD REQUEST' + '\r\n' #creating the top line of the http response (400)
+            connectionSocket.send(responseLine.encode()) #sending the top line of the http response
+            serverName = 'Server: cool webserver' + '\r\n'
+            connectionStatus = "Connection: Closed" + '\r\n' + '\r\n'
+            connectionSocket.send(serverName.encode())
+            connectionSocket.send(connectionStatus.encode())
+            outputData = "ERROR 400: BAD REQUEST" #creating a message to be displayed to the user
+
+            #for loop to send all of outputData through
+            for i in range(0, len(outputData)):
+                connectionSocket.send(outputData[i].encode())
+
+            connectionSocket.send("\r\n".encode()) #final crlf sent
+
+            file = open('httpServerLog.txt', 'a')
+            file.write(ipAddr + ' ' + '-' + ' ' + '-' + '[' + dateTime + ']' + ' ' + '"' + request[0] + '"' + ' ' + resCode + ' ' + '-' + ' ' + '"' + userAgent + '"' + '\n')
+
+            file.close()
+            
+        
         requestType, fileRequested, httpVersion = request[0].split() #splitting the topline into its parts
+
+        #if statement to ensure the user agent is in the correct place
+        if request[7][0] == "U" and request[7][1] == "s" and request[7][2] == "e" and request[7][3] == "r":
+            userAgent = request[7]
+        else:
+            userAgent = request[8]
+        
+        ipAddr = str(socket.gethostbyname(socket.gethostname()))
+        dateTime = str(datetime.now())
 
         #if statement so that if no filel is requested then index.html is returned
         if fileRequested == "/":
             fileRequested = "index.html"
 
         if fileRequested[0] == '/':
-            fileRequested = fileRequested.replace('/', '') #removing the / at the beginning of the file
+            fileRequested = fileRequested[1::] #removing the / at the beginning of the file
         print (fileRequested)
 
         accessAvailable = os.access(fileRequested, os.R_OK) #checking if the requested file is available for reading
 
         #if statement on whether or not the file is accessable
         if accessAvailable == True:
+            resCode = '200'
             file = open(fileRequested, "r") #opening the requested file for reading
             outputData = file.readlines() #reading all lines of the file and storing them in outputData
 
-            responseLine = httpVersion + ' ' + '200' + ' ' + 'OK' + '\r\n' + '\r\n' #creating the top line of the http respnse (200)
+            responseLine = httpVersion + ' ' + '200' + ' ' + 'OK' + '\r\n' #creating the top line of the http respnse (200)
             connectionSocket.send(responseLine.encode()) #sending the top line of the http response
+            serverName = 'Server: cool webserver' + '\r\n'
+            connectionStatus = "Connection: Closed" + '\r\n' + '\r\n'
+            connectionSocket.send(serverName.encode())
+            connectionSocket.send(connectionStatus.encode())
 
             #for loop to send all of output data 
             for i in range(0, len(outputData)):
                 connectionSocket.send(outputData[i].encode())
 
             connectionSocket.send("\r\n".encode()) #final crlf sent
+            fileStats = os.stat(fileRequested)
+ 
+            file.close()
+
+            file = open('httpServerLog.txt', 'a')
+            file.write(ipAddr + ' ' + '-' + ' ' + '-' + '[' + dateTime + ']' + ' ' + '"' + request[0] + '"' + ' ' + resCode + ' ' + str(fileStats.st_size) + ' ' + '"' + userAgent + '"' + '\n')
 
             file.close()
 
         else:
-            responseLine = httpVersion + ' ' + '404' + ' ' + 'NOT FOUND' + '\r\n' + '\r\n' #reating the top line of the http response (404)
+            resCode = '404'
+            responseLine = httpVersion + ' ' + '404' + ' ' + 'NOT FOUND' + '\r\n' #creating the top line of the http response (404)
             connectionSocket.send(responseLine.encode()) #sending the top line of the http response
+            serverName = 'Server: cool webserver' + '\r\n'
+            connectionStatus = "Connection: Closed" + '\r\n' + '\r\n'
+            connectionSocket.send(serverName.encode())
+            connectionSocket.send(connectionStatus.encode())
             outputData = "ERROR 404: ITEM NOT FOUND" #creating a message to be displayed to the user
 
             #for loop to send all of outputData through
@@ -76,3 +130,11 @@ else:
                 connectionSocket.send(outputData[i].encode())
 
             connectionSocket.send("\r\n".encode()) #final crlf sent
+
+            file = open('httpServerLog.txt', 'a')
+            file.write(ipAddr + ' ' + '-' + ' ' + '-' + '[' + dateTime + ']' + ' ' + '"' + request[0] + '"' + ' ' + resCode + ' ' + '-' + ' ' + '"' + userAgent + '"' + '\n')
+
+            file.close()
+               
+
+        connectionSocket.close()
